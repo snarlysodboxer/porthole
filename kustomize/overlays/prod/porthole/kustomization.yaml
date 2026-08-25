@@ -1,0 +1,19 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+# The full variant can also: read logs (pods/log), read PersistentVolumes
+# (pvc_status detail), and serve full CRD .status (resource_status).
+- ../../../apps/porthole/full
+# Or swap in the less-permissioned variant - then also drop the
+# --enable-crd-status and --enable-logs flags from the Deployment patch:
+# - ../../../apps/porthole/base
+
+# Add roleBindings for the namespaces you want the AI to be able to get info from
+- roleBinding.porthole-readonly.monitoring.yaml
+- roleBinding.porthole-readonly.team-a.yaml
+- roleBinding.porthole-readonly.team-b.yaml
+
+patches:
+- path: deployment.porthole.yaml

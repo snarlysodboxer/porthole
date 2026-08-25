@@ -1,0 +1,63 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: porthole-readonly
+  labels:
+    app.kubernetes.io/name: porthole
+    app.kubernetes.io/part-of: porthole
+# The rule set is defined once here and granted per-namespace via RoleBindings
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - events
+  - services
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - replicasets
+  - statefulsets
+  - daemonsets
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  - cronjobs
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+# Custom resource groups for the resource_conditions / resource_status
+# tools. Enumerate the groups your cluster actually runs.
+- apiGroups:
+  - cert-manager.io
+  - argoproj.io
+  - gateway.networking.k8s.io
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list

@@ -1,0 +1,14 @@
+---
+# The more-permissioned variant: everything in base, plus the grants and
+# feature flags that go beyond the minimal posture.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../base
+- clusterRole.porthole-pv-readonly.yaml
+- clusterRoleBinding.porthole-pv-readonly.yaml
+
+patches:
+- path: clusterRole.porthole-readonly.yaml
+- path: deployment.porthole.yaml

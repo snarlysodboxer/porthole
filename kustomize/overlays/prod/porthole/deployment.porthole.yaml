@@ -1,0 +1,19 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: porthole
+  namespace: porthole
+spec:
+  template:
+    spec:
+      containers:
+      - name: porthole
+        image: my-registry.example.com/porthole:v0.1.0
+        args:
+        - --mode=http
+        - --listen-addr=:8080
+        # Keep the namespaces in lockstep with the porthole-readonly RoleBindings.
+        - --namespaces=team-a,team-b,monitoring
+        - --enable-crd-status
+        - --enable-logs
