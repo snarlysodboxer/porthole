@@ -56,6 +56,9 @@ func TestRegisterAllFeaturesEnabled(t *testing.T) {
 	want := []string{
 		"list_namespaces", "list_workloads", "workload_status", "list_pods",
 		"pod_status", "events", "service_endpoints", "pvc_status", "job_status",
+		"network_policies", "rbac_summary", "service_account_access",
+		"storage_classes", "webhook_configs", "top_pods", "node_status",
+		"list_api_resources", "secret_metadata", "configmap_metadata",
 		"resource_conditions", "resource_status", "pod_logs",
 	}
 	for _, name := range want {
@@ -74,10 +77,16 @@ func TestRegisterFeatureGating(t *testing.T) {
 	cfg.EnableCRDConditions = &disabled
 	cfg.EnableCRDStatus = false
 	cfg.EnableLogs = false
+	cfg.EnableSecretMetadata = false
+	cfg.EnableConfigMapMetadata = false
 
 	session := connect(t, cfg)
 	names := listToolNames(t, session)
-	for _, gated := range []string{"resource_conditions", "resource_status", "pod_logs"} {
+	gatedOff := []string{
+		"resource_conditions", "resource_status", "pod_logs",
+		"secret_metadata", "configmap_metadata",
+	}
+	for _, gated := range gatedOff {
 		if slices.Contains(names, gated) {
 			t.Errorf("tool %s should be gated off; got %v", gated, names)
 		}

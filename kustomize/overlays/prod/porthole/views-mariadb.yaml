@@ -1,0 +1,11 @@
+# Views for mariadb-operator MariaDBs, appended to the base's views.
+# Scalar-only extraction; field choice is on you (see views-argocd.yaml).
+- group: k8s.mariadb.com
+  kind: MariaDB
+  facts:
+  - name: currentPrimary
+    path: .status.currentPrimary
+  - name: currentPrimaryPodIndex
+    path: .status.currentPrimaryPodIndex
+  - name: replicas
+    path: .status.replicas

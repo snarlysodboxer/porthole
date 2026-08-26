@@ -68,16 +68,17 @@ func (t *Toolset) PodStatus(ctx context.Context, req *mcp.CallToolRequest, in Po
 	}
 
 	out := PodStatusOutput{
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
-		Labels:    pod.Labels,
-		Phase:     string(pod.Status.Phase),
-		Reason:    pod.Status.Reason,
-		Message:   pod.Status.Message,
-		QOSClass:  string(pod.Status.QOSClass),
-		Node:      pod.Spec.NodeName,
-		CreatedAt: fmtTime(pod.CreationTimestamp),
-		StartedAt: fmtTimePtr(pod.Status.StartTime),
+		Name:        pod.Name,
+		Namespace:   pod.Namespace,
+		Labels:      pod.Labels,
+		Annotations: t.shapeAnnotations(pod.Annotations),
+		Phase:       string(pod.Status.Phase),
+		Reason:      pod.Status.Reason,
+		Message:     pod.Status.Message,
+		QOSClass:    string(pod.Status.QOSClass),
+		Node:        pod.Spec.NodeName,
+		CreatedAt:   fmtTime(pod.CreationTimestamp),
+		StartedAt:   fmtTimePtr(pod.Status.StartTime),
 	}
 	for _, c := range pod.Status.Conditions {
 		out.Conditions = append(out.Conditions, Condition{
@@ -219,7 +220,7 @@ func shapePorts(ports []corev1.ContainerPort) []string {
 }
 
 // shapeVolume reports the volume's name and which VolumeSource field is
-// set — via reflection so new source types are named automatically — plus
+// set - via reflection so new source types are named automatically - plus
 // the referenced object's name for claim/configMap/secret sources. Volume
 // contents are never touched.
 func shapeVolume(v corev1.Volume) VolumeInfo {

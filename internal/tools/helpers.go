@@ -94,3 +94,80 @@ func quantityString(rl corev1.ResourceList, name corev1.ResourceName) string {
 
 	return (&qty).String()
 }
+
+// shapeAnnotations filters an object's annotations down to the operator's
+// allowlist. The hard last-applied denylist is enforced inside
+// AnnotationAllowed, so it wins even over an explicit allowlist entry.
+func (t *Toolset) shapeAnnotations(annotations map[string]string) map[string]string {
+	var out map[string]string
+	for k, v := range annotations {
+		if !t.cfg.AnnotationAllowed(k) {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[k] = v
+	}
+
+	return out
+}
+
+// formatSelector renders a label selector compactly; "(all)" for a
+// present-but-empty selector, "" for nil.
+func formatSelector(sel *metav1.LabelSelector) string {
+	if sel == nil {
+		return ""
+	}
+	s, err := metav1.LabelSelectorAsSelector(sel)
+	if err != nil {
+		return "(invalid selector)"
+	}
+	if s.Empty() {
+		return "(all)"
+	}
+
+	return s.String()
+}
+
+// shapeMetaConditions converts metav1.Conditions (used by PDBs and most
+// CRDs' typed status) into the normalized Condition shape.
+func shapeMetaConditions(conditions []metav1.Condition) []Condition {
+	var out []Condition
+	for _, c := range conditions {
+		out = append(out, Condition{
+			Type:               c.Type,
+			Status:             string(c.Status),
+			Reason:             c.Reason,
+			Message:            c.Message,
+			LastTransitionTime: fmtTime(c.LastTransitionTime),
+		})
+	}
+
+	return out
+}
+
+// ownerStrings renders owner references as "Kind/name".
+func ownerStrings(refs []metav1.OwnerReference) []string {
+	var out []string
+	for _, r := range refs {
+		out = append(out, r.Kind+"/"+r.Name)
+	}
+
+	return out
+}
+
+// humanBytes renders a byte count as a binary quantity, e.g. "256.0Mi".
+func humanBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%dB", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f%ci", float64(b)/float64(div), "KMGTPE"[exp])
+}

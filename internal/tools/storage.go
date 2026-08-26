@@ -41,7 +41,7 @@ func (t *Toolset) PVCStatus(ctx context.Context, req *mcp.CallToolRequest, in PV
 			pv := &pvs.Items[i]
 			pvByName[pv.Name] = pv
 			// Surface volumes that reference this namespace but aren't
-			// serving a bound claim — Released/Failed orphans and
+			// serving a bound claim - Released/Failed orphans and
 			// Available volumes reserved for a claim.
 			if pv.Status.Phase != corev1.VolumeBound &&
 				pv.Spec.ClaimRef != nil && pv.Spec.ClaimRef.Namespace == in.Namespace {
@@ -77,7 +77,7 @@ func (t *Toolset) PVCStatus(ctx context.Context, req *mcp.CallToolRequest, in PV
 
 // shapePV reduces a PersistentVolume to status plus allowlisted spec facts.
 // Volume source parameters (CSI volumeAttributes, server addresses, secret
-// refs) are never copied — only which source type backs the volume and the
+// refs) are never copied - only which source type backs the volume and the
 // CSI volume handle.
 func shapePV(pv *corev1.PersistentVolume) PVInfo {
 	info := PVInfo{
@@ -106,7 +106,7 @@ func shapePV(pv *corev1.PersistentVolume) PVInfo {
 	return info
 }
 
-// pvSource names the PV's backing source type, plus the driver for CSI —
+// pvSource names the PV's backing source type, plus the driver for CSI -
 // mirroring shapeVolume's approach for pod volumes.
 func pvSource(pv *corev1.PersistentVolume) string {
 	if pv.Spec.CSI != nil {

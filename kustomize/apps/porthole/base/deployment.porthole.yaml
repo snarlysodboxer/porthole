@@ -28,10 +28,7 @@ spec:
         command:
         - /bin/porthole
         args:
-        - --mode=http
-        - --listen-addr=:8080
-        # Keep the namespaces in lockstep with the porthole-readonly RoleBindings.
-        - --namespaces=CHANGEME
+        - --config=/etc/porthole
         ports:
         - name: http
           containerPort: 8080
@@ -66,3 +63,11 @@ spec:
           seccompProfile:
             type: RuntimeDefault
         terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - name: config
+          mountPath: /etc/porthole
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: porthole

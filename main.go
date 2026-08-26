@@ -46,7 +46,7 @@ func run(logger *slog.Logger) error {
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "porthole",
-		Title:   "Porthole — read-only Kubernetes troubleshooting",
+		Title:   "Porthole - read-only Kubernetes troubleshooting",
 		Version: version,
 	}, &mcp.ServerOptions{
 		Instructions: tools.Instructions(cfg),
@@ -117,7 +117,7 @@ func serveHTTP(ctx context.Context, logger *slog.Logger, cfg *config.Config, ser
 }
 
 // bearerAuth requires "Authorization: Bearer <token>" on every request.
-// Defense in depth behind network policy — not a substitute for it.
+// Defense in depth behind network policy - not a substitute for it.
 func bearerAuth(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")

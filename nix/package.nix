@@ -1,7 +1,7 @@
 { lib, buildGoModule }:
 
 let
-  version = "0.1.0";
+  version = "0.2.0";
 in
 buildGoModule {
   pname = "porthole";
@@ -9,7 +9,7 @@ buildGoModule {
 
   src = lib.cleanSource ../.;
 
-  vendorHash = "sha256-F72bC4UiLEoWUKJk8JI6hSrxe0JwUHPlF6xPljWcWok=";
+  vendorHash = "sha256-nnDGX/TEgc6LlgPb9WgVta7IWow3pvrS8xr595pOPg0=";
 
   env.CGO_ENABLED = 0;
 
