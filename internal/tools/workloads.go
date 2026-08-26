@@ -20,6 +20,9 @@ const revisionAnnotation = "deployment.kubernetes.io/revision"
 // ListWorkloadsInput selects the namespace scope.
 type ListWorkloadsInput struct {
 	Namespace string `json:"namespace,omitempty" jsonschema:"namespace to list; omit to scan every allowed namespace"`
+	// OnlyUnhealthy keeps broad scans cheap: healthy workloads dominate a
+	// fleet-wide listing and rarely matter to the question being asked.
+	OnlyUnhealthy bool `json:"only_unhealthy,omitempty" jsonschema:"return only workloads with replica mismatches or failing conditions - recommended for broad 'what's wrong anywhere?' scans"`
 }
 
 // ListWorkloads implements the list_workloads tool.
@@ -33,13 +36,19 @@ func (t *Toolset) ListWorkloads(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 
 	out := ListWorkloadsOutput{Workloads: []WorkloadSummary{}}
+	add := func(w WorkloadSummary) {
+		if in.OnlyUnhealthy && !workloadUnhealthy(w) {
+			return
+		}
+		out.Workloads = append(out.Workloads, w)
+	}
 	for _, ns := range namespaces {
 		deps, err := t.clients.Typed.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			out.Errors = append(out.Errors, fmt.Sprintf("deployments in %q: %v", ns, err))
 		} else {
 			for i := range deps.Items {
-				out.Workloads = append(out.Workloads, summarizeDeployment(&deps.Items[i]))
+				add(summarizeDeployment(&deps.Items[i]))
 			}
 		}
 		stss, err := t.clients.Typed.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{})
@@ -47,7 +56,7 @@ func (t *Toolset) ListWorkloads(ctx context.Context, req *mcp.CallToolRequest, i
 			out.Errors = append(out.Errors, fmt.Sprintf("statefulsets in %q: %v", ns, err))
 		} else {
 			for i := range stss.Items {
-				out.Workloads = append(out.Workloads, summarizeStatefulSet(&stss.Items[i]))
+				add(summarizeStatefulSet(&stss.Items[i]))
 			}
 		}
 		dss, err := t.clients.Typed.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{})
@@ -55,12 +64,36 @@ func (t *Toolset) ListWorkloads(ctx context.Context, req *mcp.CallToolRequest, i
 			out.Errors = append(out.Errors, fmt.Sprintf("daemonsets in %q: %v", ns, err))
 		} else {
 			for i := range dss.Items {
-				out.Workloads = append(out.Workloads, summarizeDaemonSet(&dss.Items[i]))
+				add(summarizeDaemonSet(&dss.Items[i]))
 			}
 		}
 	}
 
 	return nil, out, nil
+}
+
+// workloadUnhealthy reports whether a workload deserves attention: replica
+// counts short of desired, or a condition indicating rollout trouble.
+func workloadUnhealthy(w WorkloadSummary) bool {
+	if w.ReadyReplicas < w.DesiredReplicas ||
+		w.AvailableReplicas < w.DesiredReplicas ||
+		w.UpdatedReplicas < w.DesiredReplicas {
+		return true
+	}
+	for _, c := range w.Conditions {
+		switch c.Type {
+		case "Available", "Progressing":
+			if c.Status == "False" {
+				return true
+			}
+		case "ReplicaFailure":
+			if c.Status == "True" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // WorkloadStatusInput identifies one workload.

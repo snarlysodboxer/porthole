@@ -33,6 +33,13 @@ func TestResourceStatusStripsEverythingButStatus(t *testing.T) {
 	if out.Status["phase"] != "Ready" {
 		t.Errorf("status not preserved: %+v", out.Status)
 	}
+	// Secret-looking status keys are redacted; numeric ones are kept.
+	if out.Status["rootPasswordHash"] != "(redacted)" {
+		t.Errorf("rootPasswordHash = %v, want (redacted)", out.Status["rootPasswordHash"])
+	}
+	if out.Status["keyCount"] != int64(2) {
+		t.Errorf("keyCount = %v (%T), want the number kept", out.Status["keyCount"], out.Status["keyCount"])
+	}
 	if out.Name != "widget-1" || out.Namespace != "prod" || out.Labels["app"] != "widget" {
 		t.Errorf("allowlisted metadata missing: %+v", out)
 	}
@@ -73,6 +80,7 @@ func TestResponseTypesAreClosed(t *testing.T) {
 		reflect.TypeFor[ListAPIResourcesOutput](),
 		reflect.TypeFor[SecretMetadataOutput](),
 		reflect.TypeFor[ConfigMapMetadataOutput](),
+		reflect.TypeFor[ListResourcesOutput](),
 	}
 	for _, typ := range responseTypes {
 		checkClosed(t, typ, typ.Name(), allowed, map[reflect.Type]bool{})

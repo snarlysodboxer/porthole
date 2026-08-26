@@ -85,6 +85,14 @@ func TestNoDeniedFieldLeaks(t *testing.T) {
 		collect("resource_conditions cluster-scoped", out, err)
 	}
 	{
+		_, out, err := ts.ListResources(ctx, nil, ListResourcesInput{Kind: "Widget"})
+		collect("list_resources", out, err)
+	}
+	{
+		_, out, err := ts.ListResources(ctx, nil, ListResourcesInput{Kind: "ClusterWidget"})
+		collect("list_resources cluster-scoped", out, err)
+	}
+	{
 		_, out, err := ts.ResourceStatus(ctx, nil, ResourceInput{Kind: "ClusterWidget", Name: "cw-1"})
 		collect("resource_status cluster-scoped", out, err)
 	}

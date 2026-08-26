@@ -59,7 +59,7 @@ func TestRegisterAllFeaturesEnabled(t *testing.T) {
 		"network_policies", "rbac_summary", "service_account_access",
 		"storage_classes", "webhook_configs", "top_pods", "node_status",
 		"list_api_resources", "secret_metadata", "configmap_metadata",
-		"resource_conditions", "resource_status", "pod_logs",
+		"list_resources", "resource_conditions", "resource_status", "pod_logs",
 	}
 	for _, name := range want {
 		if !slices.Contains(names, name) {
@@ -84,7 +84,7 @@ func TestRegisterFeatureGating(t *testing.T) {
 	names := listToolNames(t, session)
 	gatedOff := []string{
 		"resource_conditions", "resource_status", "pod_logs",
-		"secret_metadata", "configmap_metadata",
+		"secret_metadata", "configmap_metadata", "list_resources",
 	}
 	for _, gated := range gatedOff {
 		if slices.Contains(names, gated) {

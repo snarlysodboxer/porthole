@@ -54,7 +54,7 @@ porthole is designed to be one layer of several:
 | Tool | Answers | Notes |
 |---|---|---|
 | `list_namespaces` | "What can I look at?" | Allowlist + enabled features |
-| `list_workloads` | "What's unhealthy here/anywhere?" | Deployments/StatefulSets/DaemonSets: replica counts, conditions. Omit `namespace` to fan out over the allowlist |
+| `list_workloads` | "What's unhealthy here/anywhere?" | Deployments/StatefulSets/DaemonSets: replica counts, conditions. Omit `namespace` to fan out over the allowlist; `only_unhealthy=true` keeps broad scans cheap |
 | `workload_status` | "Why isn't this rolling out?" | Conditions, observedGeneration vs generation, rollout revision, owned-pod summaries |
 | `list_pods` | "What state are the pods in?" | Phase, ready x/y, restarts, node, per-container state reasons + exit codes |
 | `pod_status` | Safe `kubectl describe pod` | Container states incl. last termination, conditions, QoS, images, env **names only**, volume names+types, resources, ports, events |
@@ -72,8 +72,9 @@ porthole is designed to be one layer of several:
 | `list_api_resources` | "Is CRD X installed, at what version?" | Groups, versions, kinds from discovery - no extra RBAC at all |
 | `secret_metadata` | "Does the Secret exist with the expected keys?" | Name, type, key names, age, owners - never values. Flag-gated, off by default; see the tradeoff below |
 | `configmap_metadata` | "Does the ConfigMap exist with the expected keys?" | Same shape as `secret_metadata`. Flag-gated, off by default |
+| `list_resources` | "What Applications exist, are they healthy?" | Enumerates any kind (incl. CRDs) with a per-item condition summary + view facts - the discovery step before `resource_conditions` |
 | `resource_conditions` | Any kind's health, incl. CRDs | `.status.conditions` + events + view facts (below). Serves allowlisted cluster-scoped kinds via `--cluster-kinds` |
-| `resource_status` | Deeper CRD inspection | Full `.status` + events. Flag-gated, off by default |
+| `resource_status` | Deeper CRD inspection | Full `.status` + events; status fields with secret-looking names (`*password*`, `*token*`, `*secret*`, `*key*`, `*hash*`, `*credential*`) are redacted. Flag-gated, off by default |
 | `pod_logs` | Crash-loop diagnosis | `previous=true` for crashed containers, server-side RE2 `grep`, explicit truncation markers. Flag-gated, off by default |
 
 ### Annotations

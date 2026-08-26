@@ -47,12 +47,15 @@ const (
 	leakVolumeAttr    = "SENTINEL_VOLUME_ATTRIBUTE_LEAK"
 	leakSCParameter   = "SENTINEL_STORAGECLASS_PARAM_LEAK"
 	leakWebhookURL    = "SENTINEL_WEBHOOK_URL_LEAK"
+	// leakStatusSecret sits in a CR's .status under a secret-looking key:
+	// the resource_status redaction pass must catch it.
+	leakStatusSecret = "SENTINEL_STATUS_SECRET_LEAK"
 )
 
 var sentinels = []string{
 	leakEnvValue, leakLastApplied, leakAnnotation, leakConfigMapData,
 	leakSecretData, leakCRSpec, leakManagedFields, leakCommandArg,
-	leakVolumeAttr, leakSCParameter, leakWebhookURL,
+	leakVolumeAttr, leakSCParameter, leakWebhookURL, leakStatusSecret,
 }
 
 // allowedAnnotationKey is benign and allowlisted in testConfig, proving the
@@ -646,6 +649,10 @@ func fixtureWidget() *unstructured.Unstructured {
 		},
 		"status": map[string]any{
 			"phase": "Ready",
+			// Some operators stash secret-looking material in status; the
+			// resource_status redaction must catch it.
+			"rootPasswordHash": leakStatusSecret,
+			"keyCount":         int64(2),
 			"conditions": []any{
 				map[string]any{
 					"type": "Ready", "status": "True",

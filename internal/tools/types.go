@@ -321,6 +321,29 @@ type Fact struct {
 	Value string `json:"value"`
 }
 
+// ResourceSummary is one resource in a list_resources listing.
+type ResourceSummary struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Age       string `json:"age,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	// Status is a compact condition summary, e.g. "Ready=True" or
+	// "Progressing=False (ProgressDeadlineExceeded)".
+	Status string `json:"status,omitempty"`
+	// Details are facts from the operator-configured view matching this
+	// kind, e.g. an Application's sync and health status.
+	Details []Fact `json:"details,omitempty"`
+}
+
+// ListResourcesOutput enumerates resources of one kind - the "what exists
+// and how is it doing?" complement to resource_conditions' exact-name get.
+type ListResourcesOutput struct {
+	APIVersion string            `json:"apiVersion"`
+	Kind       string            `json:"kind"`
+	Resources  []ResourceSummary `json:"resources"`
+	Errors     []string          `json:"errors,omitempty"`
+}
+
 // ResourceConditionsOutput is the generic CRD escape hatch.
 type ResourceConditionsOutput struct {
 	APIVersion string `json:"apiVersion"`

@@ -346,6 +346,75 @@ func TestResourceConditionsAmbiguousKind(t *testing.T) {
 	}
 }
 
+func TestListResources(t *testing.T) {
+	ts := newTestToolset(testConfig())
+	_, out, err := ts.ListResources(context.Background(), nil, ListResourcesInput{Kind: "widget"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Kind != "Widget" || out.APIVersion != "example.com/v1" {
+		t.Errorf("identity = %s %s", out.APIVersion, out.Kind)
+	}
+	if len(out.Resources) != 1 {
+		t.Fatalf("resources = %+v", out.Resources)
+	}
+	r := out.Resources[0]
+	if r.Name != "widget-1" || r.Namespace != "prod" {
+		t.Errorf("resource = %+v", r)
+	}
+	if r.Status != "Ready=True" {
+		t.Errorf("status summary = %q, want Ready=True", r.Status)
+	}
+	// The matching view's facts come along, so a listing answers "what
+	// exists and how is it doing?" in one call.
+	if len(r.Details) == 0 || r.Details[0].Name != "phase" || r.Details[0].Value != "Ready" {
+		t.Errorf("details = %+v", r.Details)
+	}
+}
+
+func TestListResourcesClusterScoped(t *testing.T) {
+	ts := newTestToolset(testConfig())
+	_, out, err := ts.ListResources(context.Background(), nil, ListResourcesInput{Kind: "ClusterWidget"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Resources) != 1 || out.Resources[0].Name != "cw-1" || out.Resources[0].Namespace != "" {
+		t.Fatalf("resources = %+v", out.Resources)
+	}
+	// And a cluster-scoped kind off the allowlist stays rejected.
+	if _, _, err := ts.ListResources(context.Background(), nil, ListResourcesInput{Kind: "ClusterGizmo"}); err == nil {
+		t.Error("expected clusterKinds allowlist rejection")
+	}
+}
+
+func TestListResourcesDeniedNamespace(t *testing.T) {
+	ts := newTestToolset(testConfig())
+	_, _, err := ts.ListResources(context.Background(), nil, ListResourcesInput{Kind: "Widget", Namespace: "kube-system"})
+	if err == nil || !strings.Contains(err.Error(), "allowlist") {
+		t.Fatalf("err = %v, want allowlist rejection", err)
+	}
+}
+
+func TestListWorkloadsOnlyUnhealthy(t *testing.T) {
+	ts := newTestToolset(testConfig())
+	_, out, err := ts.ListWorkloads(context.Background(), nil, ListWorkloadsInput{OnlyUnhealthy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// web (2/3 ready, Progressing=False) and agent (4/5 ready) qualify;
+	// db (3/3) is filtered out.
+	if len(out.Workloads) != 2 {
+		t.Fatalf("workloads = %+v, want web and agent only", out.Workloads)
+	}
+	names := map[string]bool{}
+	for _, w := range out.Workloads {
+		names[w.Name] = true
+	}
+	if !names["web"] || !names["agent"] || names["db"] {
+		t.Errorf("names = %v", names)
+	}
+}
+
 func TestResourceConditionsClusterScopedNotAllowlisted(t *testing.T) {
 	ts := newTestToolset(testConfig())
 	_, _, err := ts.ResourceConditions(context.Background(), nil, ResourceInput{

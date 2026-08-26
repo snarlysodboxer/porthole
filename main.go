@@ -27,7 +27,16 @@ var version = "dev" // set via -ldflags at build time
 
 func main() {
 	// Logs go to stderr: stdout belongs to the protocol in stdio mode.
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// The MCP SDK logs session_id on every request; in stateless
+			// HTTP mode it is always empty - drop the noise.
+			if a.Key == "session_id" && a.Value.String() == "" {
+				return slog.Attr{}
+			}
+			return a
+		},
+	}))
 	if err := run(logger); err != nil {
 		logger.Error("fatal", "error", err)
 		os.Exit(1)
