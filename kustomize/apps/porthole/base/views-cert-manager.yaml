@@ -1,0 +1,21 @@
+# Views for cert-manager Certificates (see the README's Views section).
+# The extractor only emits scalars, so views cannot leak whole object
+# bodies - but porthole cannot judge which of your fields are sensitive:
+# THE ONUS IS ON YOU to reference only fields that hold no secret material.
+- group: cert-manager.io
+  kind: Certificate
+  facts:
+  - name: notBefore
+    path: .status.notBefore
+  - name: notAfter
+    path: .status.notAfter
+  - name: renewalTime
+    path: .status.renewalTime
+  - name: revision
+    path: .status.revision
+  - name: secretName
+    path: .spec.secretName
+  - name: dnsNames
+    path: .spec.dnsNames
+  - name: issuerRef
+    path: .spec.issuerRef.name

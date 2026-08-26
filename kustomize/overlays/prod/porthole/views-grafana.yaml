@@ -1,0 +1,11 @@
+# Views for grafana-operator Grafanas, appended to the base's views.
+# Scalar-only extraction; field choice is on you (see views-argocd.yaml).
+- group: grafana.integreatly.org
+  kind: Grafana
+  facts:
+  - name: stage
+    path: .status.stage
+  - name: stageStatus
+    path: .status.stageStatus
+  - name: version
+    path: .status.version

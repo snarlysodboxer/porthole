@@ -6,9 +6,27 @@ kind: Kustomization
 
 resources:
 - ../base
-- clusterRole.porthole-pv-readonly.yaml
-- clusterRoleBinding.porthole-pv-readonly.yaml
+- clusterRole.porthole-cluster-readonly.yaml
+- clusterRoleBinding.porthole-cluster-readonly.yaml
+# The secret/configmap-metadata grant is defined here but deliberately not
+# bound. Bind in your overlay see overlays/prod/porthole for examples.
+- clusterRole.porthole-secret-metadata.yaml
+- clusterRole.porthole-readonly-with-secrets.yaml
+
+configMapGenerator:
+- name: porthole
+  namespace: porthole
+  behavior: merge
+  literals:
+  - enableCRDStatus=true
+  - enableLogs=true
+  - enableSecretMetadata=true
+  - enableConfigMapMetadata=true
+  # Cluster-scoped kinds the generic tools may serve; keep in lockstep
+  # with the porthole-cluster-readonly ClusterRole.
+  - clusterKinds=[CHANGEME, CHANGEME]
+  # Exact annotation keys to include in responses (last-applied is always denied):
+  # - allowedAnnotations=[example.com/team]
 
 patches:
 - path: clusterRole.porthole-readonly.yaml
-- path: deployment.porthole.yaml

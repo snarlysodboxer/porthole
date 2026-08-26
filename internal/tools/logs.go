@@ -18,7 +18,7 @@ type PodLogsInput struct {
 	Pod       string `json:"pod" jsonschema:"the pod's name"`
 	Container string `json:"container,omitempty" jsonschema:"container name; defaults to the pod's only or first container"`
 	TailLines int64  `json:"tail_lines,omitempty" jsonschema:"return only the last N lines"`
-	Previous  bool   `json:"previous,omitempty" jsonschema:"return the previous (crashed) container instance's logs — key for crash loops"`
+	Previous  bool   `json:"previous,omitempty" jsonschema:"return the previous (crashed) container instance's logs - key for crash loops"`
 	Grep      string `json:"grep,omitempty" jsonschema:"RE2 regex; only matching lines are returned (applied server-side)"`
 	Since     string `json:"since,omitempty" jsonschema:"only logs newer than this window, as a Go duration like 15m or 1h"`
 	MaxBytes  int64  `json:"max_bytes,omitempty" jsonschema:"cap on returned bytes; clamped to the server's ceiling"`

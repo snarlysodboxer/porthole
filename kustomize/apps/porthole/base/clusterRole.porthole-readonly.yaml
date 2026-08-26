@@ -15,6 +15,7 @@ rules:
   - events
   - services
   - persistentvolumeclaims
+  - serviceaccounts
   verbs:
   - get
   - list
@@ -50,12 +51,44 @@ rules:
   verbs:
   - get
   - list
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - get
+  - list
+# Requires something to serve metrics.k8s.io (e.g. metrics-server).
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
 # Custom resource groups for the resource_conditions / resource_status
 # tools. Enumerate the groups your cluster actually runs.
 - apiGroups:
   - cert-manager.io
   - argoproj.io
   - gateway.networking.k8s.io
+  - k8s.mariadb.com
+  - grafana.integreatly.org
   resources:
   - '*'
   verbs:

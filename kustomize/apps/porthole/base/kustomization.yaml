@@ -9,3 +9,22 @@ resources:
 - networkPolicy.porthole.yaml
 - service.porthole.yaml
 - serviceAccount.porthole.yaml
+
+# Porthole reads the mounted configMap as a directory: each key is one
+# top-level config field. Files named views-<suffix> concatenate into the views
+# list. The generated configMap name carries a content hash, so any config
+# change rolls the Deployment automatically.
+configMapGenerator:
+- name: porthole
+  namespace: porthole
+  options:
+    labels:
+      app.kubernetes.io/name: porthole
+      app.kubernetes.io/part-of: porthole
+  literals:
+  - mode=http
+  - listenAddr=:8080
+  # Keep the namespaces in lockstep with the porthole-readonly RoleBindings.
+  - namespaces=[CHANGEME, CHANGEME]
+  files:
+  - views-cert-manager=views-cert-manager.yaml

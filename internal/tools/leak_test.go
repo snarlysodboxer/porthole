@@ -80,6 +80,54 @@ func TestNoDeniedFieldLeaks(t *testing.T) {
 		_, out, err := ts.ResourceStatus(ctx, nil, ResourceInput{Namespace: "prod", Kind: "Widget", Name: "widget-1"})
 		collect("resource_status", out, err)
 	}
+	{
+		_, out, err := ts.ResourceConditions(ctx, nil, ResourceInput{Kind: "ClusterWidget", Name: "cw-1"})
+		collect("resource_conditions cluster-scoped", out, err)
+	}
+	{
+		_, out, err := ts.ResourceStatus(ctx, nil, ResourceInput{Kind: "ClusterWidget", Name: "cw-1"})
+		collect("resource_status cluster-scoped", out, err)
+	}
+	{
+		_, out, err := ts.NetworkPolicies(ctx, nil, NetworkPoliciesInput{Namespace: "prod"})
+		collect("network_policies", out, err)
+	}
+	{
+		_, out, err := ts.RBACSummary(ctx, nil, RBACSummaryInput{Namespace: "prod"})
+		collect("rbac_summary", out, err)
+	}
+	{
+		_, out, err := ts.ServiceAccountAccess(ctx, nil, ServiceAccountAccessInput{Namespace: "prod", Name: "app-sa"})
+		collect("service_account_access", out, err)
+	}
+	{
+		_, out, err := ts.StorageClasses(ctx, nil, StorageClassesInput{})
+		collect("storage_classes", out, err)
+	}
+	{
+		_, out, err := ts.WebhookConfigs(ctx, nil, WebhookConfigsInput{})
+		collect("webhook_configs", out, err)
+	}
+	{
+		_, out, err := ts.TopPods(ctx, nil, TopPodsInput{})
+		collect("top_pods", out, err)
+	}
+	{
+		_, out, err := ts.NodeStatus(ctx, nil, NodeStatusInput{})
+		collect("node_status", out, err)
+	}
+	{
+		_, out, err := ts.ListAPIResources(ctx, nil, ListAPIResourcesInput{})
+		collect("list_api_resources", out, err)
+	}
+	{
+		_, out, err := ts.SecretMetadata(ctx, nil, SecretMetadataInput{Namespace: "prod"})
+		collect("secret_metadata", out, err)
+	}
+	{
+		_, out, err := ts.ConfigMapMetadata(ctx, nil, ConfigMapMetadataInput{Namespace: "prod"})
+		collect("configmap_metadata", out, err)
+	}
 
 	for name, out := range responses {
 		data, err := json.Marshal(out)
@@ -100,11 +148,21 @@ func TestNoDeniedFieldLeaks(t *testing.T) {
 }
 
 // TestLeakSentinelsArePlanted guards the leak test itself: if the fixtures
-// stop carrying a sentinel, the leak test would pass vacuously.
+// stop carrying a sentinel, the leak test would pass vacuously. The JSON
+// dump complements %+v because fmt renders pointer fields (e.g. the webhook
+// URL) as addresses, hiding their sentinel values.
 func TestLeakSentinelsArePlanted(t *testing.T) {
-	planted := fmt.Sprintf("%+v %+v", fixtureObjects(), fixtureWidget())
+	var planted strings.Builder
+	fmt.Fprintf(&planted, "%+v %+v %+v %+v", fixtureObjects(), fixtureMetrics(), fixtureWidget(), fixtureClusterWidget())
+	for _, obj := range fixtureObjects() {
+		data, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		planted.Write(data)
+	}
 	for _, sentinel := range sentinels {
-		if !strings.Contains(planted, sentinel) {
+		if !strings.Contains(planted.String(), sentinel) {
 			t.Errorf("fixture objects do not carry sentinel %s", sentinel)
 		}
 	}

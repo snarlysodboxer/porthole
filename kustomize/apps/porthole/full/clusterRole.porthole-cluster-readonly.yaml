@@ -1,0 +1,67 @@
+---
+# The one deliberate cluster-scoped grant, consolidating everything that
+# cannot be bound per-namespace. Each entry maps to a feature that degrades
+# gracefully without it:
+#   persistentvolumes                  pvc_status PV enrichment
+#   namespaces                         list_namespaces API fallback
+#   nodes + metrics.k8s.io/nodes       node_status
+#   storageclasses                     storage_classes
+#   webhook configurations             webhook_configs
+#   clusterroles + clusterrolebindings rbac_summary / service_account_access
+#                                      resolution and cluster bindings
+# Add the cluster-scoped CRD kinds you list in --cluster-kinds (e.g.
+# clusterissuers.cert-manager.io) so the generic tools can read them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: porthole-cluster-readonly
+  labels:
+    app.kubernetes.io/name: porthole
+    app.kubernetes.io/part-of: porthole
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  - namespaces
+  - nodes
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - metrics.k8s.io
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - clusterissuers
+  verbs:
+  - get
+  - list

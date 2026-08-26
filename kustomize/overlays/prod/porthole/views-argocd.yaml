@@ -1,0 +1,24 @@
+# Views for Argo CD Applications. This file is APPENDED to the base's
+# views (any views-<suffix> config key concatenates) - the pattern to
+# follow for adding views without overriding what base declares.
+#
+# The extractor only ever emits scalars, so views cannot leak whole object
+# bodies - but porthole cannot judge which fields are sensitive: THE ONUS
+# IS ON YOU to reference only fields that hold no secret material.
+- group: argoproj.io
+  kind: Application
+  facts:
+  - name: syncStatus
+    path: .status.sync.status
+  - name: syncRevision
+    path: .status.sync.revision
+  - name: healthStatus
+    path: .status.health.status
+  - name: healthMessage
+    path: .status.health.message
+  - name: operationPhase
+    path: .status.operationState.phase
+  - name: operationMessage
+    path: .status.operationState.message
+  - name: reconciledAt
+    path: .status.reconciledAt

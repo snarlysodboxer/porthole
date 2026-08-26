@@ -41,7 +41,7 @@ func (t *Toolset) Register(s *mcp.Server) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_workloads",
-		Description: "List Deployments, StatefulSets, and DaemonSets with replica counts and conditions. Omit namespace to scan every allowed namespace — the one-call 'what's unhealthy anywhere?' entry point.",
+		Description: "List Deployments, StatefulSets, and DaemonSets with replica counts and conditions. Omit namespace to scan every allowed namespace - the one-call 'what's unhealthy anywhere?' entry point.",
 		Annotations: readOnly(),
 	}, t.ListWorkloads)
 
@@ -86,6 +86,70 @@ func (t *Toolset) Register(s *mcp.Server) {
 		Description: "List Jobs (active/succeeded/failed, timings, conditions) and CronJobs (schedule, suspend, last schedule/success times) in a namespace. Answers 'did the job run?'.",
 		Annotations: readOnly(),
 	}, t.JobStatus)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "network_policies",
+		Description: "List NetworkPolicies in a namespace: pod selectors, policy types, and per-rule peer/port summaries. Answers 'why can't X reach Y?'.",
+		Annotations: readOnly(),
+	}, t.NetworkPolicies)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "rbac_summary",
+		Description: "Summarize a namespace's RBAC: ServiceAccounts, Roles with rules, RoleBindings, and - with the optional cluster grant - resolved ClusterRole rules and ClusterRoleBindings touching the namespace. Answers 'why is this ServiceAccount getting 403s?'.",
+		Annotations: readOnly(),
+	}, t.RBACSummary)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "service_account_access",
+		Description: "Compute one ServiceAccount's effective access: every RoleBinding (and ClusterRoleBinding, with the cluster grant) covering it - directly or via system: groups - with the referenced role's rules and provenance.",
+		Annotations: readOnly(),
+	}, t.ServiceAccountAccess)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "storage_classes",
+		Description: "List StorageClasses: provisioner, reclaim policy, volume binding mode, expansion support, default marker. Cluster-scoped; requires the optional cluster grant.",
+		Annotations: readOnly(),
+	}, t.StorageClasses)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "webhook_configs",
+		Description: "List mutating and validating webhook configurations: failure policy, timeouts, side effects, backing service, rules, selectors. Answers 'why does every apply hang or fail?'. Requires the optional cluster grant.",
+		Annotations: readOnly(),
+	}, t.WebhookConfigs)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "top_pods",
+		Description: "Point-in-time CPU/memory usage per pod and container from metrics.k8s.io (like kubectl top pods), alongside each container's configured requests and limits for comparison. Omit namespace to scan every allowed namespace. Requires metrics-server or an equivalent adapter.",
+		Annotations: readOnly(),
+	}, t.TopPods)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "node_status",
+		Description: "Node health and headroom: Ready and pressure conditions, taints, allocatable vs capacity, plus point-in-time usage percentages from metrics.k8s.io. Requires the optional cluster grant.",
+		Annotations: readOnly(),
+	}, t.NodeStatus)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_api_resources",
+		Description: "List served API groups, versions, and kinds from discovery. Answers 'is CRD X installed, at what version?'. Optional group filter ('core' for the core group).",
+		Annotations: readOnly(),
+	}, t.ListAPIResources)
+
+	if t.cfg.EnableSecretMetadata {
+		mcp.AddTool(s, &mcp.Tool{
+			Name:        "secret_metadata",
+			Description: "Secret existence, type, key names, age, and owners - never values. Answers 'is the Secret there with the key the pod expects?' for missing-key crash loops.",
+			Annotations: readOnly(),
+		}, t.SecretMetadata)
+	}
+
+	if t.cfg.EnableConfigMapMetadata {
+		mcp.AddTool(s, &mcp.Tool{
+			Name:        "configmap_metadata",
+			Description: "ConfigMap existence, key names, age, and owners - never values.",
+			Annotations: readOnly(),
+		}, t.ConfigMapMetadata)
+	}
 
 	if t.cfg.CRDConditionsEnabled() {
 		mcp.AddTool(s, &mcp.Tool{
@@ -134,10 +198,19 @@ func Instructions(cfg *config.Config) string {
 	if cfg.EnableLogs {
 		features = append(features, "pod_logs")
 	}
+	if cfg.EnableSecretMetadata {
+		features = append(features, "secret_metadata")
+	}
+	if cfg.EnableConfigMapMetadata {
+		features = append(features, "configmap_metadata")
+	}
 	if len(features) > 0 {
 		fmt.Fprintf(&b, "Optional tools enabled: %s.", strings.Join(features, ", "))
 	} else {
 		b.WriteString("No optional tools are enabled.")
+	}
+	if len(cfg.ClusterKinds) > 0 {
+		fmt.Fprintf(&b, " Cluster-scoped kinds served by the generic tools: %s.", strings.Join(cfg.ClusterKinds, ", "))
 	}
 
 	return b.String()

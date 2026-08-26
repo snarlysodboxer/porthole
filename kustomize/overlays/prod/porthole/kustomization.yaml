@@ -3,17 +3,36 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-# The full variant can also: read logs (pods/log), read PersistentVolumes
-# (pvc_status detail), and serve full CRD .status (resource_status).
+# The full variant can also: read logs (pods/log), use the consolidated
+# cluster-scoped grant, serve full CRD .status (resource_status), and
+# report Secret/ConfigMap key names (with the RoleBindings below).
 - ../../../apps/porthole/full
-# Or swap in the less-permissioned variant - then also drop the
-# --enable-crd-status and --enable-logs flags from the Deployment patch:
+# Or swap in the less-permissioned variant - then also drop the feature
+# keys the full variant's configMapGenerator merges in:
 # - ../../../apps/porthole/base
 
-# Add roleBindings for the namespaces you want the AI to be able to get info from
+# Add one roleBinding per namespace you want the AI to be able to get info
+# from: porthole-readonly, or porthole-readonly-with-secrets for namespaces
+# that also opt into Secret/ConfigMap key-name metadata (see README).
 - roleBinding.porthole-readonly.monitoring.yaml
-- roleBinding.porthole-readonly.team-a.yaml
 - roleBinding.porthole-readonly.team-b.yaml
+- roleBinding.porthole-readonly-with-secrets.team-a.yaml
+
+# Each views-<suffix> file appends views.
+configMapGenerator:
+- name: porthole
+  namespace: porthole
+  behavior: merge
+  literals:
+  # Keep in lockstep with the porthole-readonly RoleBindings above.
+  - namespaces=[team-a, team-b, monitoring]
+  # Overrides the full variant's CHANGEME placeholder; keep in lockstep
+  # with the porthole-cluster-readonly ClusterRole's CRD grants.
+  - clusterKinds=[ClusterIssuer]
+  files:
+  - views-argocd=views-argocd.yaml
+  - views-mariadb=views-mariadb.yaml
+  - views-grafana=views-grafana.yaml
 
 patches:
 - path: deployment.porthole.yaml

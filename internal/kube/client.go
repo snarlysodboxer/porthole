@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // Clients bundles the API clients the tools need.
@@ -18,6 +19,9 @@ type Clients struct {
 	Typed   kubernetes.Interface
 	Dynamic dynamic.Interface
 	Mapper  *Mapper
+	// Metrics talks to the metrics.k8s.io API (metrics-server or an
+	// adapter). Calls fail cleanly when the cluster doesn't serve it.
+	Metrics metricsclient.Interface
 }
 
 // NewClients builds clients from the given kubeconfig path, or in-cluster
@@ -40,11 +44,16 @@ func NewClients(kubeconfig string) (*Clients, error) {
 	if err != nil {
 		return nil, fmt.Errorf("building discovery client: %w", err)
 	}
+	metrics, err := metricsclient.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("building metrics client: %w", err)
+	}
 
 	return &Clients{
 		Typed:   typed,
 		Dynamic: dyn,
 		Mapper:  NewMapper(memory.NewMemCacheClient(disco)),
+		Metrics: metrics,
 	}, nil
 }
 

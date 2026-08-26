@@ -7,7 +7,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // revisionAnnotation is the single allowlisted annotation: a
@@ -89,6 +92,7 @@ func (t *Toolset) WorkloadStatus(ctx context.Context, req *mcp.CallToolRequest, 
 		out.Generation = dep.Generation
 		out.ObservedGeneration = dep.Status.ObservedGeneration
 		out.RolloutRevision = dep.Annotations[revisionAnnotation]
+		out.Annotations = t.shapeAnnotations(dep.Annotations)
 		selector = dep.Spec.Selector
 	case "statefulset":
 		sts, err := t.clients.Typed.AppsV1().StatefulSets(in.Namespace).Get(ctx, in.Name, metav1.GetOptions{})
@@ -98,6 +102,7 @@ func (t *Toolset) WorkloadStatus(ctx context.Context, req *mcp.CallToolRequest, 
 		out.WorkloadSummary = summarizeStatefulSet(sts)
 		out.Generation = sts.Generation
 		out.ObservedGeneration = sts.Status.ObservedGeneration
+		out.Annotations = t.shapeAnnotations(sts.Annotations)
 		selector = sts.Spec.Selector
 	case "daemonset":
 		ds, err := t.clients.Typed.AppsV1().DaemonSets(in.Namespace).Get(ctx, in.Name, metav1.GetOptions{})
@@ -107,24 +112,82 @@ func (t *Toolset) WorkloadStatus(ctx context.Context, req *mcp.CallToolRequest, 
 		out.WorkloadSummary = summarizeDaemonSet(ds)
 		out.Generation = ds.Generation
 		out.ObservedGeneration = ds.Status.ObservedGeneration
+		out.Annotations = t.shapeAnnotations(ds.Annotations)
 		selector = ds.Spec.Selector
 	default:
 		return nil, out, fmt.Errorf("unsupported kind %q: must be Deployment, StatefulSet, or DaemonSet", in.Kind)
 	}
 
+	var podItems []corev1.Pod
 	if selector != nil {
 		sel, err := metav1.LabelSelectorAsSelector(selector)
 		if err == nil {
 			pods, err := t.clients.Typed.CoreV1().Pods(in.Namespace).List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
 			if err == nil {
+				podItems = pods.Items
 				for i := range pods.Items {
 					out.Pods = append(out.Pods, t.summarizePod(&pods.Items[i]))
 				}
 			}
 		}
 	}
+	out.PodDisruptionBudgets = t.matchingPDBs(ctx, in.Namespace, podItems)
 
 	return nil, out, nil
+}
+
+// matchingPDBs returns the namespace's PodDisruptionBudgets whose selectors
+// match any of the workload's pods - answering "why won't this drain?".
+// Failures (e.g. no PDB RBAC) degrade to no enrichment.
+func (t *Toolset) matchingPDBs(ctx context.Context, namespace string, pods []corev1.Pod) []PDBInfo {
+	if len(pods) == 0 {
+		return nil
+	}
+	pdbs, err := t.clients.Typed.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil
+	}
+
+	var out []PDBInfo
+	for i := range pdbs.Items {
+		pdb := &pdbs.Items[i]
+		sel, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
+		if err != nil {
+			continue
+		}
+		// In policy/v1 an empty selector matches every pod in the namespace.
+		matched := sel.Empty()
+		for j := range pods {
+			if matched {
+				break
+			}
+			matched = sel.Matches(labels.Set(pods[j].Labels))
+		}
+		if matched {
+			out = append(out, shapePDB(pdb))
+		}
+	}
+
+	return out
+}
+
+func shapePDB(pdb *policyv1.PodDisruptionBudget) PDBInfo {
+	info := PDBInfo{
+		Name:               pdb.Name,
+		DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
+		CurrentHealthy:     pdb.Status.CurrentHealthy,
+		DesiredHealthy:     pdb.Status.DesiredHealthy,
+		ExpectedPods:       pdb.Status.ExpectedPods,
+		Conditions:         shapeMetaConditions(pdb.Status.Conditions),
+	}
+	if pdb.Spec.MinAvailable != nil {
+		info.MinAvailable = pdb.Spec.MinAvailable.String()
+	}
+	if pdb.Spec.MaxUnavailable != nil {
+		info.MaxUnavailable = pdb.Spec.MaxUnavailable.String()
+	}
+
+	return info
 }
 
 func summarizeDeployment(d *appsv1.Deployment) WorkloadSummary {

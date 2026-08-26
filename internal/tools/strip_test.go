@@ -44,7 +44,7 @@ func TestResourceStatusStripsEverythingButStatus(t *testing.T) {
 // TestResponseTypesAreClosed enforces the struct-level rule that keeps the
 // leak test strong: no response type may contain an open-ended container
 // (map with non-string values, or any interface type) that could smuggle
-// arbitrary object fields — except the single sanctioned passthrough,
+// arbitrary object fields - except the single sanctioned passthrough,
 // ResourceStatusOutput.Status.
 func TestResponseTypesAreClosed(t *testing.T) {
 	allowed := map[string]bool{
@@ -63,6 +63,16 @@ func TestResponseTypesAreClosed(t *testing.T) {
 		reflect.TypeFor[ResourceConditionsOutput](),
 		reflect.TypeFor[ResourceStatusOutput](),
 		reflect.TypeFor[PodLogsOutput](),
+		reflect.TypeFor[NetworkPoliciesOutput](),
+		reflect.TypeFor[RBACSummaryOutput](),
+		reflect.TypeFor[ServiceAccountAccessOutput](),
+		reflect.TypeFor[StorageClassesOutput](),
+		reflect.TypeFor[WebhookConfigsOutput](),
+		reflect.TypeFor[TopPodsOutput](),
+		reflect.TypeFor[NodeStatusOutput](),
+		reflect.TypeFor[ListAPIResourcesOutput](),
+		reflect.TypeFor[SecretMetadataOutput](),
+		reflect.TypeFor[ConfigMapMetadataOutput](),
 	}
 	for _, typ := range responseTypes {
 		checkClosed(t, typ, typ.Name(), allowed, map[reflect.Type]bool{})
@@ -89,7 +99,7 @@ func checkClosed(t *testing.T, typ reflect.Type, path string, allowed map[string
 		}
 		visited[typ] = true
 		if typ.PkgPath() != "" && !strings.Contains(typ.PkgPath(), "snarlysodboxer/porthole") {
-			t.Errorf("%s: foreign struct type %v in a response — responses must be hand-shaped", path, typ)
+			t.Errorf("%s: foreign struct type %v in a response - responses must be hand-shaped", path, typ)
 			return
 		}
 		for f := range typ.Fields() {

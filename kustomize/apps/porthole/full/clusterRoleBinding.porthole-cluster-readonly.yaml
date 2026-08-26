@@ -2,14 +2,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: porthole-pv-readonly
+  name: porthole-cluster-readonly
   labels:
     app.kubernetes.io/name: porthole
     app.kubernetes.io/part-of: porthole
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: porthole-pv-readonly
+  name: porthole-cluster-readonly
 subjects:
 - kind: ServiceAccount
   name: porthole
