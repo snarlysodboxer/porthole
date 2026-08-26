@@ -3,11 +3,14 @@ package tools
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/snarlysodboxer/porthole/internal/config"
 )
 
 // ResourceInput identifies one resource of any kind.
@@ -123,10 +126,49 @@ func shapeResourceStatus(obj *unstructured.Unstructured) ResourceStatusOutput {
 		CreatedAt:  fmtTime(obj.GetCreationTimestamp()),
 	}
 	if status, found, err := unstructured.NestedMap(obj.Object, "status"); err == nil && found {
-		out.Status = status
+		if redacted, ok := redactStatus(status).(map[string]any); ok {
+			out.Status = redacted
+		}
 	}
 
 	return out
+}
+
+// redactedStatusKey matches status field names that smell like secret
+// material. Status is supposed to be observation, not secrets, but some
+// operators stash things like password hashes there - cheap insurance for
+// the one unstructured passthrough.
+var redactedStatusKey = regexp.MustCompile(`(?i)(password|passwd|secret|token|credential|key|hash)`)
+
+// redactStatus replaces values under suspicious keys with "(redacted)".
+// Numbers and booleans are kept (counts like keyCount aren't secrets);
+// strings, lists, and objects under a matching key are dropped wholesale.
+func redactStatus(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, value := range x {
+			if redactedStatusKey.MatchString(k) {
+				switch value.(type) {
+				case bool, float64, int64, nil:
+					out[k] = value
+				default:
+					out[k] = "(redacted)"
+				}
+				continue
+			}
+			out[k] = redactStatus(value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, item := range x {
+			out[i] = redactStatus(item)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 func (t *Toolset) getResource(ctx context.Context, in ResourceInput) (*unstructured.Unstructured, *resolution, error) {
@@ -165,6 +207,106 @@ type resolution struct {
 	Kind       string
 	Group      string
 	Namespaced bool
+}
+
+// ListResourcesInput selects a kind, optionally scoped to one namespace.
+type ListResourcesInput struct {
+	Kind      string `json:"kind" jsonschema:"the resource kind to list, e.g. Application, Certificate (case-insensitive)"`
+	Namespace string `json:"namespace,omitempty" jsonschema:"namespace to list; omit to scan every allowed namespace (ignored for cluster-scoped kinds)"`
+	Group     string `json:"group,omitempty" jsonschema:"API group to disambiguate kinds that exist in multiple groups"`
+}
+
+// ListResources implements the list_resources tool: enumerate resources of
+// any kind with a compact condition summary and view facts per item - the
+// discovery step before resource_conditions' exact-name get.
+func (t *Toolset) ListResources(ctx context.Context, req *mcp.CallToolRequest, in ListResourcesInput) (*mcp.CallToolResult, ListResourcesOutput, error) {
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
+	res, err := t.clients.Mapper.Resolve(in.Kind, in.Group)
+	if err != nil {
+		return nil, ListResourcesOutput{}, err
+	}
+	out := ListResourcesOutput{
+		APIVersion: res.GVR.GroupVersion().String(),
+		Kind:       res.Kind,
+		Resources:  []ResourceSummary{},
+	}
+	view := t.cfg.ViewFor(res.GVR.Group, res.Kind)
+
+	if !res.Namespaced {
+		if !t.cfg.ClusterKindAllowed(res.Kind) {
+			return nil, out, fmt.Errorf("kind %q is cluster-scoped and not in this server's clusterKinds allowlist", res.Kind)
+		}
+		list, err := t.clients.Dynamic.Resource(res.GVR).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, out, err
+		}
+		for i := range list.Items {
+			out.Resources = append(out.Resources, t.summarizeResource(&list.Items[i], view))
+		}
+		return nil, out, nil
+	}
+
+	namespaces, err := t.namespacesFor(in.Namespace)
+	if err != nil {
+		return nil, out, err
+	}
+	for _, ns := range namespaces {
+		list, err := t.clients.Dynamic.Resource(res.GVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			out.Errors = append(out.Errors, fmt.Sprintf("%s in %q: %v", res.GVR.Resource, ns, err))
+			continue
+		}
+		for i := range list.Items {
+			out.Resources = append(out.Resources, t.summarizeResource(&list.Items[i], view))
+		}
+	}
+
+	return nil, out, nil
+}
+
+func (t *Toolset) summarizeResource(obj *unstructured.Unstructured, view *config.View) ResourceSummary {
+	summary := ResourceSummary{
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
+		Age:       age(obj.GetCreationTimestamp().Time, t.now()),
+		CreatedAt: fmtTime(obj.GetCreationTimestamp()),
+		Status:    summarizeConditions(extractConditions(obj)),
+	}
+	if view != nil {
+		summary.Details = extractFacts(view, obj)
+	}
+
+	return summary
+}
+
+// summarizeConditions renders a one-line health hint: the Ready condition
+// when present, else the first non-True condition (likely the problem),
+// else the first condition.
+func summarizeConditions(conditions []Condition) string {
+	render := func(c Condition) string {
+		s := c.Type + "=" + c.Status
+		if c.Status != "True" && c.Reason != "" {
+			s += " (" + c.Reason + ")"
+		}
+		return s
+	}
+	for _, c := range conditions {
+		if c.Type == "Ready" {
+			return render(c)
+		}
+	}
+	for _, c := range conditions {
+		if c.Status != "True" {
+			return render(c)
+		}
+	}
+	if len(conditions) > 0 {
+		return render(conditions[0])
+	}
+
+	return ""
 }
 
 // extractConditions pulls .status.conditions out of an unstructured object

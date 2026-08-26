@@ -41,7 +41,7 @@ func (t *Toolset) Register(s *mcp.Server) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_workloads",
-		Description: "List Deployments, StatefulSets, and DaemonSets with replica counts and conditions. Omit namespace to scan every allowed namespace - the one-call 'what's unhealthy anywhere?' entry point.",
+		Description: "List Deployments, StatefulSets, and DaemonSets with replica counts and conditions. Omit namespace to scan every allowed namespace, and set only_unhealthy=true for the cheap 'what's unhealthy anywhere?' entry point.",
 		Annotations: readOnly(),
 	}, t.ListWorkloads)
 
@@ -153,6 +153,12 @@ func (t *Toolset) Register(s *mcp.Server) {
 
 	if t.cfg.CRDConditionsEnabled() {
 		mcp.AddTool(s, &mcp.Tool{
+			Name:        "list_resources",
+			Description: "List resources of any kind (including custom resources) with a compact per-item condition summary and view facts. Answers 'what Applications exist and are they healthy?' before drilling in with resource_conditions. Omit namespace to scan every allowed namespace; cluster-scoped kinds must be on the clusterKinds allowlist.",
+			Annotations: readOnly(),
+		}, t.ListResources)
+
+		mcp.AddTool(s, &mcp.Tool{
 			Name:        "resource_conditions",
 			Description: "Get .status.conditions and events for any resource kind, including custom resources (Certificates, Argo CD Applications, Gateways, ...). If a bare kind is ambiguous across API groups, pass the group parameter.",
 			Annotations: readOnly(),
@@ -162,7 +168,7 @@ func (t *Toolset) Register(s *mcp.Server) {
 	if t.cfg.EnableCRDStatus {
 		mcp.AddTool(s, &mcp.Tool{
 			Name:        "resource_status",
-			Description: "Get the full .status (never spec) and events of any resource kind, including custom resources. Use when resource_conditions isn't enough.",
+			Description: "Get the full .status (never spec) and events of any resource kind, including custom resources; status fields with secret-looking names are redacted. Use when resource_conditions isn't enough.",
 			Annotations: readOnly(),
 		}, t.ResourceStatus)
 	}
