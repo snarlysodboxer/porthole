@@ -117,6 +117,10 @@ view cannot smuggle whole object bodies past the closed response types.
 **The onus is on you to reference only fields that hold no
 sensitive/secret material.**
 
+A misconfigured view never takes the server down: views only enrich
+`resource_conditions`, so a malformed view or an unparseable fact path is
+dropped with a warning at startup and every other tool keeps serving.
+
 Ready-made views for common CRDs (cert-manager, Argo CD, mariadb-operator,
 grafana-operator) ship in the example kustomize config:
 [`apps/porthole/base`](kustomize/apps/porthole/base) declares a first views

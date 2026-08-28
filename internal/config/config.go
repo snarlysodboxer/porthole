@@ -145,8 +145,11 @@ func ParseFactPath(path string) (*FactPath, error) {
 	var projection string
 	hasProjection := false
 	if i := strings.Index(body, "{"); i >= 0 {
-		if !strings.HasSuffix(body, "}") || (i > 0 && body[i-1] != '.') {
+		if !strings.HasSuffix(body, "}") {
 			return nil, fmt.Errorf("path %q: a {a,b,...} projection must be the final element, like .spec.tolerations[*].{key,effect}", path)
+		}
+		if i > 0 && body[i-1] != '.' {
+			return nil, fmt.Errorf("path %q: a {a,b,...} projection must follow a dot, like .spec.tolerations[*].{key,effect}", path)
 		}
 		projection = body[i+1 : len(body)-1]
 		hasProjection = true
@@ -253,30 +256,41 @@ func (c *Config) ViewFor(group, kind string) *View {
 	return nil
 }
 
-// validateViews rejects malformed views and unparseable fact paths. It
-// deliberately does not restrict which fields a path may reference -
-// porthole cannot know which of your CRD fields are sensitive, so choosing
-// safe fields is on you; the scalar-only extractor is the structural
-// guarantee that whole object bodies cannot leak.
-func (c *Config) validateViews() error {
+// pruneViews drops malformed views and facts with unparseable paths, returning
+// one warning per dropped item. Views only enrich resource_conditions, we warn
+// and keep going if when there are invalid views. Choosing safe fields is on
+// you; the scalar-only extractor is the structural guarantee that whole object
+// bodies cannot leak.
+func (c *Config) pruneViews() []string {
+	var warnings []string
+	views := c.Views[:0]
 	for _, v := range c.Views {
 		if v.Kind == "" {
-			return fmt.Errorf("view with group %q: kind is required", v.Group)
+			warnings = append(warnings, fmt.Sprintf("dropping view with group %q: kind is required", v.Group))
+			continue
 		}
-		if len(v.Facts) == 0 {
-			return fmt.Errorf("view for kind %q: at least one fact is required", v.Kind)
-		}
+		facts := v.Facts[:0]
 		for _, f := range v.Facts {
 			if f.Name == "" || f.Path == "" {
-				return fmt.Errorf("view for kind %q: every fact needs a name and a path", v.Kind)
+				warnings = append(warnings, fmt.Sprintf("view for kind %q: dropping fact %q: every fact needs a name and a path", v.Kind, f.Name))
+				continue
 			}
 			if _, err := ParseFactPath(f.Path); err != nil {
-				return fmt.Errorf("view fact %q: %w", f.Name, err)
+				warnings = append(warnings, fmt.Sprintf("view for kind %q: dropping fact %q: %v", v.Kind, f.Name, err))
+				continue
 			}
+			facts = append(facts, f)
 		}
+		v.Facts = facts
+		if len(v.Facts) == 0 {
+			warnings = append(warnings, fmt.Sprintf("dropping view for kind %q: no valid facts", v.Kind))
+			continue
+		}
+		views = append(views, v)
 	}
+	c.Views = views
 
-	return nil
+	return warnings
 }
 
 // NamespaceAllowed reports whether a namespace passes the allowlist. An
@@ -294,9 +308,9 @@ func defaults() *Config {
 	}
 }
 
-// Load parses args (excluding the program name), reads the config file if
-// given, and applies flags on top. It returns the effective config.
-func Load(args []string) (*Config, error) {
+// Load parses args, reads the config file if given, and applies flags on top.
+// It returns the effective config plus any warnings about invalid views.
+func Load(args []string) (*Config, []string, error) {
 	fs := flag.NewFlagSet("porthole", flag.ContinueOnError)
 	var (
 		configPath    = fs.String("config", "", "path to a YAML config file, or a directory (e.g. a mounted ConfigMap) whose files are top-level config keys")
@@ -316,17 +330,17 @@ func Load(args []string) (*Config, error) {
 		authTokenFile = fs.String("auth-token-file", "", "file with a static bearer token required in http mode")
 	)
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	cfg := defaults()
 	if *configPath != "" {
 		data, err := readConfigPath(*configPath)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := yaml.UnmarshalStrict(data, cfg); err != nil {
-			return nil, fmt.Errorf("parsing config %s: %w", *configPath, err)
+			return nil, nil, fmt.Errorf("parsing config %s: %w", *configPath, err)
 		}
 	}
 
@@ -377,7 +391,7 @@ func Load(args []string) (*Config, error) {
 	}
 
 	if cfg.Mode != "http" && cfg.Mode != "stdio" {
-		return nil, fmt.Errorf("invalid mode %q: must be http or stdio", cfg.Mode)
+		return nil, nil, fmt.Errorf("invalid mode %q: must be http or stdio", cfg.Mode)
 	}
 	if cfg.MaxLogBytes <= 0 {
 		cfg.MaxLogBytes = DefaultMaxLogBytes
@@ -386,11 +400,9 @@ func Load(args []string) (*Config, error) {
 		cfg.MaxEvents = DefaultMaxEvents
 	}
 	cfg.Views = mergeViews(cfg.Views)
-	if err := cfg.validateViews(); err != nil {
-		return nil, err
-	}
+	warnings := cfg.pruneViews()
 
-	return cfg, nil
+	return cfg, warnings, nil
 }
 
 // mergeViews combines views declaring the same group and kind by merging

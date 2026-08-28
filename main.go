@@ -44,9 +44,12 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	cfg, err := config.Load(os.Args[1:])
+	cfg, warnings, err := config.Load(os.Args[1:])
 	if err != nil {
 		return err
+	}
+	for _, w := range warnings {
+		logger.Warn("ignoring config", "warning", w)
 	}
 	clients, err := kube.NewClients(cfg.Kubeconfig)
 	if err != nil {

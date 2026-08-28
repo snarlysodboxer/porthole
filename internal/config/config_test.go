@@ -17,7 +17,7 @@ func writeConfig(t *testing.T, content string) string {
 }
 
 func TestDefaults(t *testing.T) {
-	cfg, err := Load(nil)
+	cfg, _, err := Load(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ enableLogs: true
 maxLogBytes: 1000
 maxEvents: 10
 `)
-	cfg, err := Load([]string{"--config", path})
+	cfg, _, err := Load([]string{"--config", path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ mode: http
 namespaces: [prod]
 maxEvents: 10
 `)
-	cfg, err := Load([]string{
+	cfg, _, err := Load([]string{
 		"--config", path,
 		"--mode", "stdio",
 		"--namespaces", "a, b,c",
@@ -87,14 +87,14 @@ maxEvents: 10
 }
 
 func TestInvalidMode(t *testing.T) {
-	if _, err := Load([]string{"--mode", "carrier-pigeon"}); err == nil {
+	if _, _, err := Load([]string{"--mode", "carrier-pigeon"}); err == nil {
 		t.Fatal("expected error for invalid mode")
 	}
 }
 
 func TestUnknownConfigKeyRejected(t *testing.T) {
 	path := writeConfig(t, "modee: http\n")
-	if _, err := Load([]string{"--config", path}); err == nil {
+	if _, _, err := Load([]string{"--config", path}); err == nil {
 		t.Fatal("expected strict YAML parsing to reject unknown keys")
 	}
 }
@@ -138,7 +138,7 @@ views:
       - name: notAfter
         path: .status.notAfter
 `)
-	cfg, err := Load([]string{"--config", path})
+	cfg, _, err := Load([]string{"--config", path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ views:
       - name: firstCondition
         path: .status.conditions[0].type
 `)
-	cfg, err := Load([]string{"--config", path})
+	cfg, _, err := Load([]string{"--config", path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,19 +175,61 @@ views:
 	}
 }
 
-func TestViewBadPathsRejected(t *testing.T) {
-	for _, path := range []string{"status.phase", ".status..phase", "", ".status.conditions[x]", ".status.items[*", ".status.[*]"} {
+func TestViewBadPathsDroppedWithWarning(t *testing.T) {
+	// A misconfigured view must not take the server down: views only enrich
+	// resource_conditions, so a bad fact is dropped with a warning and every
+	// other tool (and the view's valid facts) keeps serving.
+	for _, path := range []string{"status.phase", ".status..phase", "", ".status.conditions[x]", ".status.items[*", ".status.[*]", ".status.ancestors[*]{a,b}"} {
 		yaml := `
 views:
   - group: example.com
     kind: Widget
     facts:
-      - name: f
+      - name: bad
         path: "` + path + `"
+      - name: good
+        path: .status.phase
 `
-		if _, err := Load([]string{"--config", writeConfig(t, yaml)}); err == nil {
-			t.Errorf("path %q should be rejected", path)
+		cfg, warnings, err := Load([]string{"--config", writeConfig(t, yaml)})
+		if err != nil {
+			t.Fatalf("path %q: load must not fail: %v", path, err)
 		}
+		if len(warnings) != 1 {
+			t.Errorf("path %q: warnings = %v, want one for the dropped fact", path, warnings)
+		}
+		v := cfg.ViewFor("example.com", "Widget")
+		if v == nil || len(v.Facts) != 1 || v.Facts[0].Name != "good" {
+			t.Errorf("path %q: view = %+v, want only the valid fact kept", path, v)
+		}
+	}
+}
+
+func TestViewWithoutValidFactsDropped(t *testing.T) {
+	cfg, warnings, err := Load([]string{"--config", writeConfig(t, `
+views:
+  - group: example.com
+    kind: Widget
+    facts:
+      - name: bad
+        path: "not-dotted"
+  - kind: ""
+    facts:
+      - name: f
+        path: .status.phase
+`)})
+	if err != nil {
+		t.Fatalf("load must not fail: %v", err)
+	}
+	// One warning for the dropped fact, one for the then-empty view, and
+	// one for the view missing a kind.
+	if len(warnings) != 3 {
+		t.Errorf("warnings = %v, want 3", warnings)
+	}
+	if cfg.ViewFor("example.com", "Widget") != nil {
+		t.Error("a view left with no valid facts should be dropped")
+	}
+	if len(cfg.Views) != 0 {
+		t.Errorf("views = %+v, want all dropped", cfg.Views)
 	}
 }
 
@@ -284,7 +326,7 @@ func TestConfigDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load([]string{"--config", dir})
+	cfg, _, err := Load([]string{"--config", dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +345,7 @@ func TestConfigDirectory(t *testing.T) {
 
 	// A views-* file must hold a list.
 	write("views-bad", "not: a list")
-	if _, err := Load([]string{"--config", dir}); err == nil {
+	if _, _, err := Load([]string{"--config", dir}); err == nil {
 		t.Error("non-list views-* key should be rejected")
 	}
 	if err := os.Remove(filepath.Join(dir, "views-bad")); err != nil {
@@ -315,7 +357,7 @@ func TestConfigDirectory(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "maxEvents")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load([]string{"--config", dir}); err == nil {
+	if _, _, err := Load([]string{"--config", dir}); err == nil {
 		t.Error("an unreadable config key must fail closed")
 	}
 	if err := os.Remove(filepath.Join(dir, "maxEvents")); err != nil {
@@ -324,7 +366,7 @@ func TestConfigDirectory(t *testing.T) {
 
 	// A typo'd filename is an unknown config key and must be rejected.
 	write("enableLogz", "true")
-	if _, err := Load([]string{"--config", dir}); err == nil {
+	if _, _, err := Load([]string{"--config", dir}); err == nil {
 		t.Error("unknown config key file should be rejected")
 	}
 }
@@ -346,7 +388,7 @@ views:
       - name: renewalTime
         path: .status.renewalTime
 `)
-	cfg, err := Load([]string{"--config", path})
+	cfg, _, err := Load([]string{"--config", path})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +419,7 @@ views:
       - name: notAfter
         path: .status.conditions[0].lastTransitionTime
 `)
-	cfg, err := Load([]string{"--config", path})
+	cfg, _, err := Load([]string{"--config", path})
 	if err != nil {
 		t.Fatal(err)
 	}
